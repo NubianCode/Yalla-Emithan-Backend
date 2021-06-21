@@ -30,6 +30,7 @@ class AuthController extends Controller
      */
     public function login(Request $request)
     {
+
         $this->validate($request, [
             'phone' => 'required|min:10|max:14',
             'password' => 'required|string|min:4',
@@ -153,6 +154,7 @@ class AuthController extends Controller
         }
 
         DB::beginTransaction();
+        $flag = $code->delete();
 
         if ($flag) {
 
@@ -173,7 +175,6 @@ class AuthController extends Controller
                 if ($flag) {
                     $request->password = $user->password;
                     DB::commit();
-                    $flag = $code->delete();
                     return $this->login($request);
 
                 }

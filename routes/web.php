@@ -29,6 +29,7 @@ $router->group(['prefix' => 'auth'], function () use ($router) {
 $router->group(['prefix' => 'students'], function () use ($router) {
     $router->post('changeName', 'StudentController@changeName');
     $router->post('addComplaint', 'StudentController@addComplaint');
+    $router->post('getLevels', 'StudentController@getLevels');
 });
 
 $router->get('/', function () use ($router) {

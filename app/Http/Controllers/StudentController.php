@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Student;
 use App\Models\Complaint;
-
+use App\Models\Level;
 class StudentController extends Controller
 {
 
@@ -16,7 +16,7 @@ class StudentController extends Controller
      */
     public function __construct()
     {
-        $this->middleware('auth:api');
+        $this->middleware('auth:api', ['except' => ['getLevels']]);
     }
 
     public function changeName(Request $request) {
@@ -41,7 +41,7 @@ class StudentController extends Controller
 
     public function addComplaint(Request $request)  {
         $this->validate($request, [
-            'complaint' => 'bail|required|min:4',
+            'complaint' => 'bail|required|min:20',
             'complaint_type_id' => 'bail|required|exists:complaints_types,id'
         ]);
 
@@ -62,6 +62,10 @@ class StudentController extends Controller
         }
 
 
+    }
+
+    public function getLevels(Request $request) {
+        return response()->json(['levels' => Level::with('classes.subjects.chapters.lessons')->get()], 200);
     }
 
 
