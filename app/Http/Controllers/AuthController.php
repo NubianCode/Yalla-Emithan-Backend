@@ -9,6 +9,11 @@ use App\Models\User;
 use App\Models\Student;
 use App\Models\Code;
 use Illuminate\Support\Facades\Hash;
+use App\Models\NotePayment;
+use App\Models\Note;
+use App\Models\Payment;
+use App\Models\Subscription;
+use App\Models\classs;
 use DB;
 
 class AuthController extends Controller
@@ -30,13 +35,12 @@ class AuthController extends Controller
      */
     public function login(Request $request)
     {
-
         $this->validate($request, [
             'phone' => 'required|min:10|max:14',
             'password' => 'required|string|min:4',
         ]);
 
-        $credentials = $request->only('phone','password');
+        $credentials = $request->only('phone', 'password');
 
         if (! $token = auth()->attempt($credentials)) {
             return response()->json(['error' => 'Unauthorized'], 401);
@@ -157,7 +161,6 @@ class AuthController extends Controller
         $flag = $code->delete();
 
         if ($flag) {
-
             $user = new User();
             $user->password = Hash::make($request->password);
             $user->phone = $request->phone;
@@ -176,7 +179,6 @@ class AuthController extends Controller
                     $request->password = $user->password;
                     DB::commit();
                     return $this->login($request);
-
                 }
             } else {
                 DB::rollBack();
@@ -189,8 +191,8 @@ class AuthController extends Controller
     }
 
 
-    public function resetPassword(Request $request) {
-
+    public function resetPassword(Request $request)
+    {
         $this->validate($request, [
             'phone' => 'bail|required|exists:users,phone',
             'code' => 'bail|required',
@@ -211,20 +213,18 @@ class AuthController extends Controller
 
         $flag = $user->save();
 
-        if($flag) {
+        if ($flag) {
             $flag = $code->delete();
             return response()->json("", 200);
-        }
-        else {
+        } else {
             $this->logout();
             return response()->json("", 500);
         }
-
     }
 
 
-    public function checkCode(Request $request) {
-
+    public function checkCode(Request $request)
+    {
         $this->validate($request, [
             'code' => 'bail|required',
         ]);
@@ -233,9 +233,132 @@ class AuthController extends Controller
 
         if (!$code) {
             return response()->json("", 401);
-        }
-        else {
+        } else {
             return response()->json("", 200);
+        }
+    }
+
+    public function sendCode(Request $request)
+    {
+        $this->validate($request, [
+                'phone' => 'required|min:10|max:14',
+            ]);
+    
+        $destinations = $request->phone;
+        $numbers = '12345678910111236542301236985452315245552012369874563201423698745';
+        $code = substr(str_shuffle(str_repeat($numbers, 5)), 0, 5);
+        //$client = new HttpClient(); //GuzzleHttp\Client
+        //$response = $client->request('GET', 'http://196.202.134.90/SMSbulk/webacc.aspx?user=Dr.spare&pwd=0963263869&smstext='.$number.'&Sender=Dr.Spare&Nums='.$destinations.'');
+    
+        $flag = Code::updateOrCreate(['phone' => $request->phone], ['code' => $code]);
+        if ($flag) {
+            return response()->json("", 200);
+        } else {
+            return response()->json("", 500);
+        }
+    }
+
+    public function notePayment(Request $request)
+    {
+        $this->validate($request, [
+            'code' => 'bail|required',
+            'note_id' => 'bail|required|exists:notes,id',
+            'payment_type_id' => 'bail|required|exists:payments_types,id'
+        ]);
+
+        $code = Code::firstWhere('code', $request->code);
+
+        if (!$code) {
+            return response()->json("", 401);
+        }
+
+        DB::beginTransaction();
+
+        $flag = $code->delete();
+
+        $user = auth()->user();
+
+        $payment = new Payment();
+
+        $note = Note::find($request->note_id);
+
+        $payment->price = $note->price;
+        $payment->student_id = $user->id;
+        $payment->payment_type_id = $request->payment_type_id;
+        
+
+        $flag = $payment->save();
+        if ($flag) {
+            $notePayment = new NotePayment();
+
+            $notePayment->id = $payment->id;
+            $notePayment->note_id = $request->note_id;
+
+            $flag = $notePayment->save();
+
+            if ($flag) {
+                DB::commit();
+                return response()->json("", 200);
+            } else {
+                DB::rollBack();
+                return response()->json("", 500);
+            }
+        } else {
+            DB::rollBack();
+            return response()->json("", 500);
+        }
+    }
+
+    public function classPayment(Request $request)
+    {
+        $this->validate($request, [
+            'code' => 'bail|required',
+            'class_id' => 'bail|required|exists:classes,id',
+            'payment_type_id' => 'bail|required|exists:payments_types,id',
+            'subscribe_package_id' => "bail|required|exists:subscribes_packages,id"
+        ]);
+
+        $code = Code::firstWhere('code', $request->code);
+
+        if (!$code) {
+            return response()->json("", 401);
+        }
+
+        DB::beginTransaction();
+
+        $flag = $code->delete();
+
+        $user = auth()->user();
+
+        $payment = new Payment();
+
+        $class = Classs::find($request->class_id);
+
+        $payment->price = $class->price;
+        $payment->student_id = $user->id;
+        $payment->payment_type_id = $request->payment_type_id;
+        
+
+        $flag = $payment->save();
+        if ($flag) {
+            $subscription = new Subscription();
+
+            $subscription->id = $payment->id;
+            $subscription->class_id = $class->id;
+            $subscription->subscribe_package_id = $request->subscribe_package_id;
+
+            $flag = $subscription->save();
+
+            if ($flag) {
+                DB::commit();
+                return response()->json("", 200);
+            } else {
+                DB::rollBack();
+                return response()->json("", 500);
+            }
+        } else {
+            DB::rollBack();
+            return response()->json("", 500);
         }
     }
 }

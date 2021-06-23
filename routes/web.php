@@ -23,6 +23,9 @@ $router->group(['prefix' => 'auth'], function () use ($router) {
     $router->post('register', 'AuthController@register');
     $router->post('resetPassword', 'AuthController@resetPassword');
     $router->post('checkCode', 'AuthController@checkCode');
+    $router->post('sendCode','AuthController@sendCode');
+    $router->post('notePayment', 'AuthController@notePayment');
+    $router->post('classPayment', 'AuthController@classPayment');
 
 });
 

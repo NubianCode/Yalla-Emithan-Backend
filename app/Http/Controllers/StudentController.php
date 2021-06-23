@@ -69,20 +69,24 @@ class StudentController extends Controller
         $levels =  Level::with('classes.subjects.chapters.lessons', 'classes.subjects.oldExams', 'classes.subjects.notes')->get();
         foreach ($levels as $level) {
             foreach ($level->classes as $class) {
-                $class->subscription = Subscription::where('class_id', $class->id)->whereHas('payment',function ($qur) use ($user){
-                    $qur->where('student_id',$user->id);
-                })->orderBy('id', 'desc')->first();
-
-                foreach($class->subjects as $subject) {
-                    foreach($subject->notes as $note) {
-                        $note->payment = NotePayment::where('note_id', $note->id)->whereHas('payment',function ($qur) use ($user){
-                            $qur->where('student_id',$user->id);
+               
+                foreach ($class->subjects as $subject) {
+                    $subject->subscription = Subscription::where('class_id', $class->id)->whereHas('payment', function ($qur) use ($user) {
+                        $qur->where('student_id', $user->id);
+                    })->orderBy('id', 'desc')->first();
+                    $subject->price = $class->price;
+                    foreach ($subject->notes as $note) {
+                        $note->payment = NotePayment::where('note_id', $note->id)->whereHas('payment', function ($qur) use ($user) {
+                            $qur->where('student_id', $user->id);
                         })->orderBy('id', 'desc')->first();
                     }
                 }
             }
         }
 
-        return $levels;
+        return response()->json(['levels' => $levels], 200);
     }
+
+    
+
 }
