@@ -11,7 +11,19 @@ class Subscription extends Model
     protected $table = "subscriptions";
 
     public function payment() {
-        return $this->belongsTO(Payment::class,'id');
+        return $this->belongsTo(Payment::class,'id');
+    }
+
+    public function classs() {
+        return $this->belongsTo(Classs::class,'class_id');
+    }
+
+    public function subscriptionPackage() {
+        return $this->belongsTo(SubscriptionPackage::class);
+    }
+
+    public function subscriptionStatus() {
+        return $this->belongsTo(SubscriptionStatus::class);
     }
     
 }

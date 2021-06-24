@@ -8,6 +8,7 @@ use App\Models\Complaint;
 use App\Models\Level;
 use App\Models\Subscription;
 use App\Models\NotePayment;
+use App\Models\Payment;
 
 class StudentController extends Controller
 {
@@ -85,6 +86,11 @@ class StudentController extends Controller
         }
 
         return response()->json(['levels' => $levels], 200);
+    }
+
+    public function getPayments(Request $request) {
+        $user = auth()->user();
+        return Payment::where('student_id',$user->id)->with('subscription.classs' , 'subscription.subscriptionPackage' , 'subscription.subscriptionStatus','notePayment.note')->paginate(10);
     }
 
     

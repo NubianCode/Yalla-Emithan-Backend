@@ -13,5 +13,8 @@ class NotePayment extends Model
     public function payment() {
         return $this->belongsTO(Payment::class,'id');
     }
+    public function note() {
+        return $this->belongsTo(Note::class);
+    }
     
 }

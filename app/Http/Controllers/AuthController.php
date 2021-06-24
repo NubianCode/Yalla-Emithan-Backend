@@ -345,7 +345,7 @@ class AuthController extends Controller
 
             $subscription->id = $payment->id;
             $subscription->class_id = $class->id;
-            $subscription->subscribe_package_id = $request->subscribe_package_id;
+            $subscription->subscription_package_id = $request->subscribe_package_id;
 
             $flag = $subscription->save();
 
