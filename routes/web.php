@@ -36,6 +36,10 @@ $router->group(['prefix' => 'students'], function () use ($router) {
     $router->post('getPayments', 'StudentController@getPayments');
 });
 
+$router->group(['prefix' => 'exams'], function () use ($router) {
+    $router->post('getExam', 'ExamController@getExam');
+});
+
 $router->get('/', function () use ($router) {
     return $router->app->version();
 });
