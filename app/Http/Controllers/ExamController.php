@@ -12,10 +12,10 @@ class ExamController extends Controller
         $this->middleware('auth:api');
     }
 
-    public function getExam(Request $request) { 
+    public function getExam(Request $request)
+    {
         $request->lessons = json_decode($request->lessons, true);
-        $exam = Question::whereIn('lesson_id', $request->lessons)->with('text','image','answers')->limit($request->limit)->get();
-        return response()->json(['questions'=>$exam],200);
+        $exam = Question::whereIn('lesson_id', $request->lessons)->with('text', 'image', 'answers')->orderBy('id','DESC')->limit($request->limit)->get();
+        return response()->json(['questions'=>$exam], 200);
     }
-
 }
