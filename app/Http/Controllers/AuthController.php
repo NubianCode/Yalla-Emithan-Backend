@@ -158,6 +158,7 @@ class AuthController extends Controller
         }
 
         DB::beginTransaction();
+        
         $flag = $code->delete();
 
         if ($flag) {

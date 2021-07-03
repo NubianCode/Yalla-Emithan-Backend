@@ -59,7 +59,6 @@ class StudentController extends Controller
         if ($flag) {
             return response()->json("", 201);
         } else {
-            $this->logout();
             return response()->json("", 500);
         }
     }
@@ -92,6 +91,8 @@ class StudentController extends Controller
         $user = auth()->user();
         return Payment::where('student_id',$user->id)->with('subscription.classs' , 'subscription.subscriptionPackage' , 'subscription.subscriptionStatus','notePayment.note')->paginate(10);
     }
+
+    
 
     
 

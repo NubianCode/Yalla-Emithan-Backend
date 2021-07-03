@@ -38,6 +38,8 @@ $router->group(['prefix' => 'students'], function () use ($router) {
 
 $router->group(['prefix' => 'exams'], function () use ($router) {
     $router->post('getExam', 'ExamController@getExam');
+    $router->post('addResult', 'ExamController@addResult');
+    $router->post('addQuestionComplaint', 'ExamController@addQuestionComplaint');
 });
 
 $router->get('/', function () use ($router) {
