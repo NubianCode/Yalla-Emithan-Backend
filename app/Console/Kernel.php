@@ -13,7 +13,9 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-        //
+        \App\Console\Commands\DeleteOldData::class,
+        \App\Console\Commands\SendMotivationalQuote::class,
+        \App\Console\Commands\UpdateSubscriptions::class,
     ];
 
     /**
@@ -24,6 +26,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        //
+        $schedule->command('data:delete-old')->daily();
+        $schedule->command('send:motivation')->everyThreeHours();
+        $schedule->command('subscriptions:update')->everyThreeHours();
     }
 }

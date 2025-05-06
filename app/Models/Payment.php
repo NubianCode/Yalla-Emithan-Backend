@@ -18,4 +18,12 @@ class Payment extends Model
         return $this->hasOne(NotePayment::class,'id');
     }
     
+    public function student() {
+        return $this->belongsTo(Student::class);
+    }
+    
+    public function mBookRequest() {
+        return $this->hasOne(MBookRequest::class,'id');
+    }
+    
 }

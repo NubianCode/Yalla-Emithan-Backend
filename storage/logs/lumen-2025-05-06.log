@@ -1,0 +1,1 @@
+[2025-05-06 05:19:15] local.ERROR: Firebase Notification Error: Unable to connect to the API: cURL error 52: Empty reply from server (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://fcm.googleapis.com/v1/projects/yalla-emtihan/messages:send  

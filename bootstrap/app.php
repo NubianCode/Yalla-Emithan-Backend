@@ -23,9 +23,16 @@ $app = new Laravel\Lumen\Application(
     dirname(__DIR__)
 );
 
+$app->instance('path.config', app()->basePath() . DIRECTORY_SEPARATOR . 'config');
+$app->instance('path.storage', app()->basePath() . DIRECTORY_SEPARATOR . 'storage');
+
 $app->withFacades();
 
 $app->withEloquent();
+
+if (!class_exists('Image')) {
+    class_alias('Intervention\Image\Facades\Image', 'Image');
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -61,7 +68,9 @@ $app->singleton(
 
 $app->configure('app');
 $app->configure('permission');
+$app->configure('cors');
 $app->alias('cache', \Illuminate\Cache\CacheManager::class);
+
 
 /*
 |--------------------------------------------------------------------------
@@ -74,14 +83,16 @@ $app->alias('cache', \Illuminate\Cache\CacheManager::class);
 |
 */
 
-// $app->middleware([
-//     App\Http\Middleware\ExampleMiddleware::class
-// ]);
+$app->middleware([
+    // App\Http\Middleware\ExampleMiddleware::class
+    \Fruitcake\Cors\HandleCors::class,
+]);
 
 $app->routeMiddleware([
      'auth' => App\Http\Middleware\Authenticate::class,
      'permission' => Spatie\Permission\Middlewares\PermissionMiddleware::class,
      'role' => Spatie\Permission\Middlewares\RoleMiddleware::class,
+     'video.auth' => App\Http\Middleware\VideoStreamingMiddleware::class,
 ]);
 
 /*
@@ -95,11 +106,15 @@ $app->routeMiddleware([
 |
 */
 
-//$app->register(App\Providers\AppServiceProvider::class);
+$app->register(App\Providers\AppServiceProvider::class);
 $app->register(App\Providers\AuthServiceProvider::class);
+$app->register(App\Providers\FirebaseServiceProvider::class);
 // $app->register(App\Providers\EventServiceProvider::class);
 $app->register(Tymon\JWTAuth\Providers\LumenServiceProvider::class);
 $app->register(Spatie\Permission\PermissionServiceProvider::class);
+$app->register(Fruitcake\Cors\CorsServiceProvider::class);
+$app->register(Intervention\Image\ImageServiceProvider::class);
+$app->register(Irazasyed\Larasupport\Providers\ArtisanServiceProvider::class);
 
 //lumen flipbox
 $app->register(Flipbox\LumenGenerator\LumenGeneratorServiceProvider::class);

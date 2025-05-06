@@ -53,10 +53,21 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
      */
     protected $hidden = [
         'password',
+        'token'
     ];
 
     public function student() {
         return $this->hasOne(Student::class,'id');
+    }
+    public function supervisor() {
+        return $this->hasOne(Supervisor::class,'id');
+    }
+    
+    public function schoolSupervisor(){
+        return $this->hasOne(SchoolSupervisor::class,'supervisor_id');
+    }
+    public function school() {
+        return $this->hasOneThrough(School::class,SchoolSupervisor::class,'supervisor_id','id' ,'id','school_id');
     }
 
 }

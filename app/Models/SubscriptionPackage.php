@@ -8,6 +8,6 @@ class SubscriptionPackage extends Model
 {
     public $timestamps = false;
 	protected $guarded = [];
-    protected $table = "subscribes_packages";
+    protected $table = "subscriptions_packages";
     
 }

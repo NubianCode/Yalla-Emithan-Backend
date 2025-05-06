@@ -15,15 +15,23 @@ class Subscription extends Model
     }
 
     public function classs() {
-        return $this->belongsTo(Classs::class,'class_id');
+        return $this->hasOneThrough(LiveClass::class,SubscriptionLiveClass::class,'subscription_id','id','id','live_class_id');
     }
 
     public function subscriptionPackage() {
-        return $this->belongsTo(SubscriptionPackage::class);
+        return $this->belongsTo(SubscriptionPackage::class,'subscription_package_id');
     }
 
     public function subscriptionStatus() {
         return $this->belongsTo(SubscriptionStatus::class);
+    }
+    
+    public function status() {
+        return $this->belongsTo(Status::class);
+    }
+    
+    public function student() {
+        return $this->belongsTo(Student::class);
     }
     
 }

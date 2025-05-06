@@ -10,4 +10,8 @@ class Result extends Model
 	protected $guarded = [];
     protected $table = "results";
     
+    
+    public function student() {
+        return $this->beLongsTo(Student::class);
+    }
 }

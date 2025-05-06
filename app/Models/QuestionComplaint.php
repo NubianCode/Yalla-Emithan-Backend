@@ -10,4 +10,8 @@ class QuestionComplaint extends Model
 	protected $guarded = [];
     protected $table = "questions_complaints";
     
+    public function type() {
+        return $this->belongsTo(QuestionComplaintType::class,'question_complaint_type_id');
+    }
+    
 }
