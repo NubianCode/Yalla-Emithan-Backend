@@ -15,7 +15,7 @@ class SchoolRegistration extends Model
     }
     
     public function student() {
-        return $this->belongsTo(SchoolStudent::class,'student_id');
+        return $this->belongsTo(SchoolStudent::class,'school_student_id');
     }
     
     public function room() {

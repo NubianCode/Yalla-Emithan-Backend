@@ -20,7 +20,7 @@ class Notification extends Controller
     public function requestSocket($data, $link)
     {
         $url = app()->environment('local')
-            ? "http://localhost:8080/socket/{$link}"
+            ? "http://localhost:3000/socket/{$link}"
             : "https://socket.yalla-emtihan.com/socket/{$link}";
 
         return $this->httpClient->post($url, [

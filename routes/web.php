@@ -103,6 +103,7 @@ $router->group(['prefix' => 'schools'], function () use ($router) {
     $router->get('getNotifications', 'SchoolController@getNotifications');
     $router->get('getSchoolNotifications', 'SchoolController@getSchoolNotifications');
     $router->get('getStudents', 'SchoolController@getStudents');
+    $router->get('getStudentDataByNationalId', 'SchoolController@getStudentDataByNationalId');
     $router->get('getSchedules', 'SchoolController@getSchedules');
     $router->get('getHomeworks', 'HomeworksController@getHomeworks');
     $router->post('deleteSchoolBranchRoomScheduleSubject', 'SchoolController@deleteSchoolBranchRoomScheduleSubject');
@@ -124,7 +125,13 @@ $router->group(['prefix' => 'schools'], function () use ($router) {
     $router->post('editRegistration', 'SchoolController@editRegistration');
     
     $router->post('registerNewStudent', 'SchoolController@registerNewStudent');
+    $router->post('registerNewStudentViaPlatform', 'SchoolController@registerNewStudentViaPlatform');
     $router->post('registerExistingStudent', 'SchoolController@registerExistingStudent');
+    $router->post('registerExistingStudentViaPlatform', 'SchoolController@registerExistingStudentViaPlatform');
+    $router->post('editRegistrationViaPlatform', 'SchoolController@editRegistrationViaPlatform');
+    $router->post('updateStudentInfo', 'SchoolController@updateStudentInfo');
+    $router->get('getSubjects', 'SchoolController@getSubjects');
+    
     
     $router->get('getSupervisors', 'SchoolController@getSupervisors');
     
@@ -153,6 +160,18 @@ $router->group(['prefix' => 'schools'], function () use ($router) {
     $router->post('editNotification','SchoolController@editNotification');
     $router->post('watchSchoolVideo','SchoolVideoController@watchSchoolVideo');
     $router->post('deleteNotification','SchoolController@deleteNotification');
+    $router->post('addOrEditSchoolSubjectTotalVideo','SchoolController@addOrEditSchoolSubjectTotalVideo');
+    $router->get('getSchoolVideosChapters','SchoolController@getSchoolVideosChapters');
+    $router->post('addSchoolVideoChapter','SchoolController@addSchoolVideoChapter');
+    $router->post('editSchoolVideoChapter','SchoolController@editSchoolVideoChapter');
+    $router->get('getSchoolVideos','SchoolController@getSchoolVideos');
+    $router->post('reorderVideos','SchoolController@reorderVideos');
+    $router->post('deleteSchoolVideo','SchoolController@deleteSchoolVideo');
+    $router->post('addSchoolVideo','SchoolController@addSchoolVideo');
+
+    
+    
+    
     
 });
 

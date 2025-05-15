@@ -174,7 +174,7 @@ if ($homework->image) {
     ];
 
     // Send all images in one request
-    $this->requestSocket($requestBody, 'sendBulkWhatsAppImages');
+    $this->notification->requestSocket($requestBody, 'sendBulkWhatsAppImages');
 } else {
     $requestBody = [
         'instanceId'   => $school->whatsapp_instance_id,
@@ -184,7 +184,7 @@ if ($homework->image) {
     ];
 
     // Send all messages in one request
-    $this->requestSocket($requestBody, 'sendBulkWhatsAppMessages');
+    $this->notification->requestSocket($requestBody, 'sendBulkWhatsAppMessages');
 }
 
             DB::commit();

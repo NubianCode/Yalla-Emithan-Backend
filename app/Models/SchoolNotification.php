@@ -19,7 +19,7 @@ class SchoolNotification extends Model
     }
     
     public function supervisor() {
-        return $this->hasonethrough(Supervisor::class,SchoolSupervisor::class,'id','id','school_supervisor_id','supervisor_id');
+        return $this->hasOne(SchoolNotificationSupervisor::class,'school_notification_id');
     }
     
 }

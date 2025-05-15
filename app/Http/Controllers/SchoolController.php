@@ -3,11 +3,17 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\School;
+use App\Models\SchoolSubjectTotalVideo;
+use App\Models\Video;
 use App\Models\SchoolHomework;
 use App\Models\SchoolHomeworkSolution;
+use App\Models\SchoolVideoChapter;
 use App\Models\SchoolLesson;
 use App\Models\AcademicYear;
+use App\Models\SchoolVideo;
 use App\Models\SchoolAppointment;
+use App\Models\User;
+use App\Models\Subject;
 use App\Models\SchoolNotification;
 use App\Models\SchoolStudent;
 use App\Models\SchoolBranchRoomSchedule;
@@ -27,11 +33,17 @@ use App\Models\SchoolRegistrationInstallment;
 use App\Models\State;
 use App\Models\SchoolSupervisor;
 use App\Models\Religion;
+use App\Models\SchoolNotificationSupervisor;
 use App\Models\SchoolSupervisorType;
 use App\Models\SchoolBranchCost;
+use App\Models\PlatformPrice;
+use App\Models\SchoolVideoBasic;
+use App\Models\SchoolVideoAdvanced;
 use App\Models\SchoolNotificationType;
 use App\Models\SchoolNotificationStudent;
 use App\Models\SchoolNotificationBranchRoom;
+use App\Models\SchoolRegistrationInstallmentSupervisor;
+use App\Models\SchoolRegistrationInstallmentDocument;
 use Carbon\Carbon;
 use DB;
 
@@ -46,6 +58,101 @@ class SchoolController extends Controller
 
         $this->notification = new Notification();
     }
+
+    public function deleteSchoolVideo(Request $request)
+{
+    $this->validate($request, [
+        'school_video_id' => 'required|integer|exists:schools_videos,id',
+    ]);
+
+    DB::beginTransaction();
+
+    try {
+        $videoId = $request->school_video_id;
+
+        // Check if it's basic
+        $isBasic = DB::table('schools_videos_basic')->where('school_video_id', $videoId)->exists();
+        $isAdvanced = DB::table('schools_videos_advanced')->where('school_video_id', $videoId)->exists();
+
+        if ($isBasic) {
+            DB::table('schools_videos_basic')->where('schools_video_id', $videoId)->delete();
+        }
+
+        if ($isAdvanced) {
+            $advanced = DB::table('schools_videos_advanced')->where('school_video_id', $videoId)->first();
+
+            if ($advanced && $advanced->url) {
+                $filePath = "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/school_videos/" . $advanced->url;
+                if (file_exists($filePath)) {
+                    unlink($filePath);
+                }
+            }
+
+            DB::table('schools_videos_advanced')->where('school_video_id', $videoId)->delete();
+        }
+
+        // Delete from main table
+        DB::table('schools_videos')->where('id', $videoId)->delete();
+
+        DB::commit();
+
+        return response()->json(['message' => 'Video deleted successfully.']);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['message' => 'Failed to delete video.', 'error' => $e->getMessage()], 500);
+    }
+}
+
+    public function reorderVideos(Request $request)
+{
+    $this->validate($request, [
+        'video_ids' => 'required|array',
+        'video_ids.*' => 'integer|exists:schools_videos,id',
+        'school_video_chapter_id' => 'required|integer|exists:schools_videos_chapters,id',
+    ]);
+
+    DB::beginTransaction();
+
+    try {
+        foreach ($request->video_ids as $index => $videoId) {
+            DB::table('schools_videos')
+                ->where('id', $videoId)
+                ->where('school_video_chapter_id', $request->school_video_chapter_id)
+                ->update(['sort' => $index + 1]);
+        }
+
+        DB::commit();
+
+        return response()->json(['message' => 'Video order updated successfully.']);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['message' => 'Failed to update video order.', 'error' => $e->getMessage()], 500);
+    }
+}
+
+
+    public function addSchoolVideoChapter(Request $request)
+{
+    $this->validate($request, [
+        'school_id'   => 'required|integer|exists:schools,id',
+        'subject_id'  => 'required|integer|exists:subjects,id',
+        'ar_name'     => 'required|string|max:255',
+        'en_name'     => 'required|string|max:255',
+    ]);
+
+    $chapter = SchoolVideoChapter::create([
+        'school_id'  => $request->school_id,
+        'subject_id' => $request->subject_id,
+        'ar_name'    => $request->ar_name,
+        'en_name'    => $request->en_name,
+    ]);
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Chapter added successfully.',
+        'data' => $chapter,
+    ],201);
+}
 
     public function getStudentsByKey(Request $request)
     {
@@ -103,151 +210,234 @@ class SchoolController extends Controller
 
         return $appointments;
     }
+    public function addSchoolVideo(Request $request)
+{
+    $this->validate($request, [
+        'school_video_chapter_id' => 'required|integer|exists:schools_videos_chapters,id',
+        'name' => 'required|string|max:400',
+        'duration' => 'required|string|max:10',
+        'unlock_date' => 'required|date',
+        'video_id' => 'nullable|exists:videos,id', // If provided → basic
+        'video' => 'nullable|file|mimes:mp4,avi,mov|max:204800', // If provided → advanced
+    ]);
+
+    DB::beginTransaction();
+
+    try {
+        $schoolVideo = new SchoolVideo();
+        $schoolVideo->school_video_chapter_id = $request->school_video_chapter_id;
+        $schoolVideo->name = $request->name;
+        $schoolVideo->duration = $request->duration;
+        $schoolVideo->unlock_date = $request->unlock_date;
+        $schoolVideo->save();
+
+        // Case 1: Basic Video
+        if ($request->filled('video_id')) {
+            $basic = new SchoolVideoBasic();
+            $basic->school_video_id = $schoolVideo->id;
+            $basic->video_id = $request->video_id;
+            $basic->save();
+        }
+
+        // Case 2: Advanced Video
+        if ($request->hasFile('video')) {
+            $file = $request->file('video');
+            $fileName = uniqid() . '.' . $file->getClientOriginalExtension();
+            $file->move( "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/school_videos/", $fileName);
+
+            $advanced = new SchoolVideoAdvanced();
+            $advanced->school_video_id = $schoolVideo->id;
+            $advanced->url = $fileName;
+            $advanced->save();
+        }
+
+        DB::commit();
+
+        return response()->json(['message' => 'Video added successfully.'],201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['message' => 'Failed to add video.', 'error' => $e->getMessage()], 500);
+    }
+}
+
+    public function getSchoolVideos(Request $request)
+{
+    $this->validate($request, [
+        'school_video_chapter_id' => 'required|integer|exists:schools_videos_chapters,id',
+        'key' => 'nullable|string|max:255',
+    ]);
+
+    $query = SchoolVideo::with(['basic.video', 'advanced'])
+        ->where('school_video_chapter_id', $request->school_video_chapter_id);
+
+    if ($request->filled('key')) {
+        $key = $request->key;
+
+        $query->where(function ($q) use ($key) {
+            $q->where('ar_name', 'like', "%$key%")
+              ->orWhere('en_name', 'like', "%$key%");
+        });
+    }
+
+    $videos = $query->orderBy("sort", "desc")
+    ->paginate(300);
+
+    $chapter = SchoolVideoChapter::find($request->school_video_chapter_id);
+
+    $basicVideos = Video::where('subject_id',$chapter->subject_id)->get();
+    return response()->json([
+        'basic_videos' => $basicVideos,
+        'videos' => $videos,
+    ]);
+}
+
+public function editSchoolVideoChapter(Request $request)
+{
+    $this->validate($request, [
+        'school_video_chapter_id' => 'required|integer|exists:schools_videos_chapters,id',
+        'ar_name'    => 'required|string|max:255',
+        'en_name'    => 'required|string|max:255',
+    ]);
+
+    $chapter = SchoolVideoChapter::find($request->school_video_chapter_id);
+
+    $chapter->update([
+        'ar_name' => $request->ar_name,
+        'en_name' => $request->en_name,
+    ]);
+
+    return response()->json([
+        'status'  => true,
+        'message' => 'Chapter updated successfully.',
+        'data'    => $chapter,
+    ]);
+}
+
+
+    public function getSchoolVideosChapters(Request $request)
+{
+    $this->validate($request, [
+        'school_id' => 'required|integer|exists:schools,id',
+        'subject_id' => 'required|integer|exists:subjects,id',
+        'key' => 'nullable|string|max:255',
+    ]);
+
+    $query = SchoolVideoChapter::withCount('videos')
+        ->where('school_id', $request->school_id)->where('subject_id', $request->subject_id);
+
+    if ($request->filled('key')) {
+        $key = $request->key;
+
+        $query->where(function ($q) use ($key) {
+            $q->where('id', 'like', "%$key%")
+              ->orWhere('ar_name', 'like', "%$key%")
+              ->orWhere('en_name', 'like', "%$key%");
+        });
+    }
+
+    $chapters = $query->orderBy('id','desc')->get();
+
+    return response()->json([
+        'status' => true,
+        'data' => $chapters,
+    ]);
+}
+
+
 
     public function getRegistrations(Request $request)
-    {
-        $this->validate($request, [
-            "school_id" => "bail|required|exists:schools,id",
-            "school_branch_id" =>
-                "nullable|sometimes|integer|exists:schools_branches,id",
-        ]);
+{
+    $this->validate($request, [
+        "school_id" => "bail|required|exists:schools,id",
+        "school_branch_id" => "nullable|sometimes|integer|exists:schools_branches,id",
+        "key" => "nullable|string|max:100", // New optional search parameter
+    ]);
 
-        $academicYear = AcademicYear::orderBy("id", "desc")->first();
+    $academicYear = AcademicYear::latest("id")->first();
+    $user = auth()->user();
 
-        $branches = SchoolBranch::where(
-            "school_id",
-            $request->school_id
-        )->get();
-        $rooms;
-        $types = SchoolRegistrationType::get();
-        $religions = Religion::get();
-        $currencies = Currency::get();
-        $branches = [];
+    $supervisor = SchoolSupervisor::where("school_id", $request->school_id)
+        ->where("supervisor_id", $user->id)
+        ->firstOrFail();
 
-        $user = auth()->user();
+    $types = SchoolRegistrationType::all();
+    $religions = Religion::all();
+    $currencies = Currency::all();
 
-        $supervisor = SchoolSupervisor::where("school_id", $request->school_id)
-            ->where("supervisor_id", $user->id)
-            ->first();
+    $isGeneralSupervisor = $supervisor->school_supervisor_type_id == 4;
 
-        $registrations;
-
-        if ($supervisor->school_supervisor_type_id == 4) {
-            $rooms = SchoolBranchRoom::whereHas("branch", function (
-                $query
-            ) use ($request) {
-                $query->where("school_id", $request->school_id);
-            })
-                ->with("classs.level")
-                ->get();
-
-            $branches = SchoolBranch::where(
-                "school_id",
-                $request->school_id
-            )->get();
-            if ($request->school_branch_id == "") {
-                $registrations = SchoolRegistration::where(
-                    "academic_year_id",
-                    $academicYear->id
-                )
-                    ->with([
-                        "type",
-                        "student",
-                        "room.classs.level",
-                        "room.branch",
-                        "installments" => function ($query) {
-                            $query->orderByDesc("id", "desc"); // Orders installments by ID in descending order
-                        },
-                        "installments.supervisor",
-                        "supervisor",
-                        "currency",
-                    ])
-                    ->orderBy("id", "desc")
-                    ->paginate(50);
-            } else {
-                $registrations = SchoolRegistration::where(
-                    "academic_year_id",
-                    $academicYear->id
-                )
-                    ->whereHas("room.branch", function ($query) use ($request) {
-                        $query->where(
-                            "school_branch_id",
-                            $request->school_branch_id
-                        );
-                    })
-                    ->with([
-                        "type",
-                        "student",
-                        "room.classs.level",
-                        "room.branch",
-                        "installments" => function ($query) {
-                            $query->orderByDesc("id", "desc"); // Orders installments by ID in descending order
-                        },
-                        "installments.supervisor",
-                        "supervisor",
-                        "currency",
-                    ])
-                    ->orderBy("id", "desc")
-                    ->paginate(50);
-            }
-        } else {
-            $rooms = SchoolBranchRoom::where(
-                "school_branch_id",
-                $request->school_branch_id
-            )
-                ->whereHas("branch", function ($query) use ($request) {
-                    $query->where("school_id", $request->school_id);
-                })
-                ->with("classs.level")
-                ->get();
-            $registrations = SchoolRegistration::where(
-                "academic_year_id",
-                $academicYear->id
-            )
-                ->whereHas("room.branch", function ($query) use ($request) {
-                    $query->where(
-                        "school_branch_id",
-                        $request->school_branch_id
-                    );
-                })
-                ->with([
-                    "type",
-                    "student",
-                    "room.classs.level",
-                    "room.branch",
-                    "installments" => function ($query) {
-                        $query->orderByDesc("id");
-                    },
-                    "installments.supervisor",
-                    "supervisor",
-                    "currency",
-                ])
-                ->orderBy("id", "desc")
-                ->paginate(50);
+    $rooms = SchoolBranchRoom::when(
+        $isGeneralSupervisor,
+        function ($query) use ($request) {
+            $query->whereHas("branch", fn($q) => $q->where("school_id", $request->school_id));
+        },
+        function ($query) use ($request) {
+            $query->where("school_branch_id", $request->school_branch_id)
+                ->whereHas("branch", fn($q) => $q->where("school_id", $request->school_id));
         }
+    )
+    ->with("classs.level")
+    ->get();
 
-        foreach ($registrations as $registration) {
-            $registration->is_me =
-                $registration->supervisor_id == $supervisor->id;
-            foreach ($registration->installments as $installment) {
-                $installment->is_me =
-                    $installment->supervisor_id == $supervisor->id;
+    $branches = $isGeneralSupervisor
+        ? SchoolBranch::where("school_id", $request->school_id)->get()
+        : [];
+
+    // Main query for registrations
+    $registrations = SchoolRegistration::where("academic_year_id", $academicYear->id)
+        ->when(
+            !$isGeneralSupervisor || $request->filled("school_branch_id"),
+            function ($query) use ($request) {
+                $query->whereHas("room.branch", function ($q) use ($request) {
+                    $q->where("school_branch_id", $request->school_branch_id);
+                });
             }
-        }
+        )
+        ->when($request->filled("key"), function ($query) use ($request) {
+            $key = $request->key;
+            $query->where(function ($q) use ($key) {
+                $q->whereHas("student", function ($subQuery) use ($key) {
+                    $subQuery->where("national_number", "like", "%{$key}%");
+                })
+                ->orWhere("id", "like", "%{$key}%"); // registration ID
+            });
+        })
+        ->with([
+            "type",
+            "student",
+            "room.classs.level",
+            "room.branch",
+            "installments" => fn($query) => $query->orderByDesc("id"),
+            "installments.supervisor.supervisor",
+            "installments.document",
+            "installments.currency",
+            "supervisor",
+            "currency",
+        ])
+        ->orderByDesc("id")
+        ->paginate(50);
 
-        return response()->json(
-            [
-                "registrations" => $registrations,
-                "branches" => $branches,
-                "rooms" => $rooms,
-                "currencies" => $currencies,
-                "types" => $types,
-                "religions" => $religions,
-                "branches" => $branches,
-            ],
-            200
-        );
+    foreach ($registrations as $registration) {
+        $registration->is_me = $registration->supervisor_id == $supervisor->id;
+        foreach ($registration->installments as $installment) {
+            $installment->is_me = optional($installment->supervisor)->supervisor_id == $supervisor->id;
+        }
     }
+
+    $platformPrice = PlatformPrice::where("school_id", $request->school_id)->first();
+
+    return response()->json([
+        "registrations" => $registrations,
+        "branches" => $branches,
+        "rooms" => $rooms,
+        "currencies" => $currencies,
+        "types" => $types,
+        "religions" => $religions,
+        "platform_price" => $platformPrice,
+    ], 200);
+}
+
 
     public function getNotifications(Request $request)
     {
@@ -294,7 +484,7 @@ class SchoolController extends Controller
                     );
                 });
             })
-            ->with("room.room.classs.level", "student.student", "supervisor")
+            ->with("room.room.classs.level", "student.student", "supervisor.supervisor")
             ->orderBy("id", "desc")
             ->paginate(50);
 
@@ -410,6 +600,68 @@ class SchoolController extends Controller
         }
     }
 
+    public function getStudentDataByNationalId(Request $request)
+    {
+        $this->validate($request, [
+            "national_number" => "required|string|max:11",
+            "school_id" => "required|exists:schools,id",
+        ]);
+
+        $student = SchoolStudent::where(
+            "national_number",
+            $request->national_number
+        )->first();
+
+        if (!$student) {
+            return response()->json(["message" => "الطالب غير موجود."], 404);
+        }
+
+        $academicYear = AcademicYear::orderBy("id", "desc")->first();
+
+        // Check registration
+        $registration = SchoolRegistration::where(
+            "school_student_id",
+            $student->id
+        )
+            ->where("academic_year_id", $academicYear->id)
+            ->orderBy("id", "desc")
+            ->first();
+
+        if ($registration) {
+            $school = School::find($registration->school_id);
+            if ($registration->school_id == $request->school_id) {
+                return response()->json(
+                    [
+                        "title" => "تسجيل سابق",
+                        "body" =>
+                            "تم تسجيل الطالب بالفعل في " .
+                            $school->ar_name .
+                            " هذا العام. يمكنك عرض التسجيل وتعديله.",
+                        "type" => 1,
+                        "natinational_number" => $student->national_number,
+                    ],
+                    409
+                );
+            } else {
+                return response()->json(
+                    [
+                        "title" => "الطالب مسجل في مدرسة أخرى",
+                        "body" =>
+                            "الطالب مسجل في " .
+                            $school->ar_name .
+                            " هذا العام. يرجى التواصل مع الدعم الفني لنقل الطالب.",
+                        "type" => 2,
+                        "natinational_number" => $student->national_number,
+                    ],
+                    409
+                );
+            }
+        }
+
+        // All checks passed
+        return response()->json($student);
+    }
+
     public function getStudents(Request $request)
     {
         $this->validate($request, [
@@ -431,6 +683,10 @@ class SchoolController extends Controller
                 "registrations.academicYear",
                 "registrations.currency",
                 "registrations.room.classs.level",
+                "registrations.supervisor",
+                "type",
+                "country",
+                "state",
             ])
             ->orderBy("id", "desc");
 
@@ -458,16 +714,101 @@ class SchoolController extends Controller
 
         $students = $query->paginate(50);
 
+        $students->getCollection()->transform(function ($student) {
+            $student->notifications = $student->notifications; // triggers accessor
+            return $student;
+        });
+
         $branches = SchoolBranch::where(
             "school_id",
             $request->school_id
         )->get();
 
+        $religions = Religion::all();
+        
+
         return response()->json([
             "students" => $students,
             "branches" => $branches,
+            "religions" => $religions
         ]);
     }
+
+    public function updateStudentInfo(Request $request)
+{
+    $this->validate($request, [
+        'school_student_id' => 'required|exists:schools_students,id',
+        'full_name' => 'nullable|string|max:255',
+        'mother_full_name' => 'nullable|string|max:255',
+        'gender' => 'nullable|in:0,1',
+        'birthday' => 'nullable|date',
+        'country_id' => 'nullable|exists:countries,id',
+        'state_id' => 'nullable|exists:states,id',
+        'religion_id' => 'nullable|exists:religions,id',
+        'parent_mobile_number' => 'nullable|string|max:20',
+        'parent_whatsapp_mobile_number' => 'nullable|string|max:20',
+        'student_whatsapp_mobile_number' => 'nullable|string|max:20',
+        'student_image' => 'nullable|file|image|max:2048',
+        'delete_student_image' => 'nullable|boolean',
+    ]);
+
+    try {
+        $student = SchoolStudent::findOrFail($request->school_student_id);
+
+        // Handle image deletion if requested
+        if ($request->boolean('delete_student_image')) {
+            if ($student->image && file_exists("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/schools_students_images/".$student->image)) {
+                unlink("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/schools_students_images/".$student->image);
+            }
+            $student->image = null;
+        }
+
+        // Handle image upload (if not deleted above)
+        if ($request->hasFile('student_image')) {
+            if ($student->image && file_exists("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/schools_students_images/".$student->image)) {
+                unlink("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/schools_students_images/".$student->image);
+            }
+
+            $image = $request->file('student_image');
+            $imageName = time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
+            $imagePath = 'uploads/students/' . $imageName;
+
+            $image->move("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/schools_students_images/", $imageName);
+            $student->image = $imageName;
+        }
+
+        // Update other fields
+        $student->fill($request->only([
+            'full_name',
+            'mother_full_name',
+            'gender',
+            'birthday',
+            'country_id',
+            'state_id',
+            'religion_id',
+            'parent_mobile_number',
+            'parent_whatsapp_mobile_number',
+            'student_whatsapp_mobile_number',
+        ]));
+
+        $student->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'تم تحديث بيانات الطالب بنجاح',
+            'student' => $student,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'حدث خطأ أثناء تحديث بيانات الطالب',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
+
 
     public function updateNationalNumber(Request $request)
     {
@@ -656,175 +997,145 @@ class SchoolController extends Controller
     }
 
     public function sendNotification(Request $request)
-    {
-        $this->validate($request, [
-            "school_id" => "required|integer|exists:schools,id",
-            "school_notification_type_id" => "required|integer|in:1,2,3,4",
-            "notification" => "required|string|max:900",
-            "school_student_id" =>
-                "nullable|integer|exists:schools_students,id",
-            "school_branch_room_id" =>
-                "nullable|integer|exists:schools_branches_rooms,id",
+{
+    $this->validate($request, [
+        "school_id" => "required|integer|exists:schools,id",
+        "school_notification_type_id" => "required|integer|in:1,2,3,4",
+        "notification" => "required|string|max:900",
+        "school_student_id" => "nullable|integer|exists:schools_students,id",
+        "school_branch_room_id" => "nullable|integer|exists:schools_branches_rooms,id",
+    ]);
+
+    $user = auth()->user();
+
+    $supervisor = SchoolSupervisor::where("school_id", $request->school_id)
+        ->where("supervisor_id", $user->id)
+        ->first();
+
+    $academicYear = AcademicYear::orderBy("id", "desc")->first();
+
+    DB::beginTransaction();
+
+    try {
+        $notification = SchoolNotification::create([
+            "school_id" => $request["school_id"],
+            "school_notification_type_id" => $request["school_notification_type_id"],
+            "academic_year_id" => $academicYear->id,
+            "notification" => $request["notification"],
         ]);
 
-        $user = auth()->user();
+        // 👇 Save sender to pivot table
+        SchoolNotificationSupervisor::create([
+            "school_notification_id" => $notification->id,
+            "school_supervisor_id" => $supervisor->id,
+        ]);
 
-        $supervisor = SchoolSupervisor::where("school_id", $request->school_id)
-            ->where("supervisor_id", $user->id)
-            ->first();
-        $academicYear = AcademicYear::orderBy("id", "desc")->first();
-
-        DB::beginTransaction();
-
-        try {
-            $notification = SchoolNotification::create([
-                "school_id" => $request["school_id"],
-                "school_notification_type_id" =>
-                    $request["school_notification_type_id"],
-                "school_supervisor_id" => $supervisor->id,
-                "academic_year_id" => $academicYear->id,
-                "notification" => $request["notification"],
+        // Handle target (room or student)
+        if ($notification->school_notification_type_id == 2 && !empty($request["school_branch_room_id"])) {
+            SchoolNotificationBranchRoom::create([
+                "school_notification_id" => $notification->id,
+                "school_branch_room_id" => $request["school_branch_room_id"],
             ]);
-
-            if (
-                $notification->school_notification_type_id == 2 &&
-                !empty($request["school_branch_room_id"])
-            ) {
-                SchoolNotificationBranchRoom::create([
-                    "school_notification_id" => $notification->id,
-                    "school_branch_room_id" =>
-                        $request["school_branch_room_id"],
-                ]);
-            } elseif (
-                ($notification->school_notification_type_id == 3 ||
-                    $notification->school_notification_type_id == 4) &&
-                !empty($request["school_student_id"])
-            ) {
-                SchoolNotificationStudent::create([
-                    "school_notification_id" => $notification->id,
-                    "school_student_id" => $request["school_student_id"],
-                ]);
-            }
-
-            DB::commit();
-
-            // ✅ WhatsApp Notification Logic (after successful commit)
-            try {
-                $school = School::findOrFail($request->school_id);
-                $message =
-                    "إشعار من " .
-                    $school->ar_name .
-                    "\n\n" .
-                    $request->notification;
-
-                $room;
-                $students = SchoolStudent::where(
-                    "id",
-                    $request->school_student_id
-                )->get();
-
-                if ($notification->school_notification_type_id == 1) {
-                    $room = "school_" . $request->school_id;
-                } elseif ($notification->school_notification_type_id == 2) {
-                    $room = "room_" . $request->school_branch_room_id;
-                } else {
-                    $room = "student_" . $students[0]->student_id;
-                }
-
-                if ($notification->school_notification_type_id > 2) {
-                    $reciver = User::find($students[0]->student_id);
-                    $this->notification->sendSinglFullAppNotification(
-                        $reciver->firebase,
-                        "pushNotification",
-                        [
-                            "type" => "8",
-                            "room" => $room,
-                            "title" => $school->ar_name,
-                            "image" => $school->image,
-                            "body" => $request->notification,
-                            "notification" => $notification,
-                        ]
-                    );
-                } else {
-                    $this->notification->sendGroupFullAppNotification(
-                        $room,
-                        "pushNotification",
-                        [
-                            "type" => "8",
-                            "room" => $room,
-                            "title" => $school->ar_name,
-                            "image" => $school->image,
-                            "body" => $request->notification,
-                            "notification" => $notification,
-                        ]
-                    );
-                }
-
-                // Fetch students depending on notification type
-                if ($request->school_notification_type_id == 1) {
-                    $students = SchoolStudent::where(
-                        "school_id",
-                        $request->school_id
-                    )->get();
-                } elseif ($request->school_notification_type_id == 2) {
-                    $students = SchoolStudent::where(
-                        "school_branch_room_id",
-                        $request->school_branch_room_id
-                    )->get();
-                } else {
-                    $students = SchoolStudent::where(
-                        "school_id",
-                        $request->school_id
-                    )->get(); // fallback
-                }
-
-                // Extract phone numbers
-                $phoneNumbers = collect($students)
-                    ->pluck(
-                        $request->school_notification_type_id == 4
-                            ? "parent_whatsapp_mobile_number"
-                            : "student_whatsapp_mobile_number"
-                    )
-                    ->filter()
-                    ->unique()
-                    ->values()
-                    ->toArray();
-
-                // Send in one request
-                $this->notification->requestSocket(
-                    [
-                        "instanceId" => $school->whatsapp_instance_id,
-                        "token" => $school->whatsapp_token,
-                        "phoneNumbers" => $phoneNumbers,
-                        "message" => $message,
-                    ],
-                    "sendBulkWhatsAppMessages"
-                );
-            } catch (\Exception $e) {
-                \Log::error(
-                    "Failed to send WhatsApp message: " . $e->getMessage()
-                );
-            }
-
-            return response()->json(
-                [
-                    "message" => "Notification sent successfully",
-                    "notification_id" => $notification->id,
-                ],
-                201
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json(
-                [
-                    "message" => "Error sending notification",
-                    "error" => $e->getMessage(),
-                ],
-                500
-            );
+        } elseif (in_array($notification->school_notification_type_id, [3, 4]) && !empty($request["school_student_id"])) {
+            SchoolNotificationStudent::create([
+                "school_notification_id" => $notification->id,
+                "school_student_id" => $request["school_student_id"],
+            ]);
         }
+
+        DB::commit();
+
+
+        // ✅ WhatsApp Notification Logic
+        try {
+            $school = School::findOrFail($request->school_id);
+            $message = "إشعار من " . $school->ar_name . "\n\n" . $request->notification;
+
+            // Determine room/topic
+            if ($notification->school_notification_type_id == 1) {
+                $room = "school_" . $request->school_id;
+            } elseif ($notification->school_notification_type_id == 2) {
+                $room = "room_" . $request->school_branch_room_id;
+            } else {
+                $student = SchoolStudent::find($request->school_student_id);
+                $room = "student_" . $student->student_id;
+            }
+
+            // Push Notification
+            if ($notification->school_notification_type_id > 2) {
+                $student = SchoolStudent::find($request->school_student_id);
+                if($student->student_id != null) {
+                    $receiver = User::find($student->student_id);
+                $this->notification->sendSinglFullAppNotification(
+                    $receiver->firebase,
+                    "pushNotification",
+                    [
+                        "type" => "8",
+                        "room" => $room,
+                        "title" => $school->ar_name,
+                        "image" => $school->image,
+                        "body" => $request->notification,
+                        "notification" => $notification,
+                    ]
+                );
+                }
+            } else {
+                $this->notification->sendGroupFullAppNotification(
+                    $room,
+                    "pushNotification",
+                    [
+                        "type" => "8",
+                        "room" => $room,
+                        "title" => $school->ar_name,
+                        "image" => $school->image,
+                        "body" => $request->notification,
+                        "notification" => $notification,
+                    ]
+                );
+            }
+
+            // WhatsApp Sending
+            if ($request->school_notification_type_id == 1) {
+                $students = SchoolStudent::where("school_id", $request->school_id)->get();
+            } elseif ($request->school_notification_type_id == 2) {
+                $students = SchoolStudent::where("school_branch_room_id", $request->school_branch_room_id)->get();
+            } else {
+                $students = [$student ?? SchoolStudent::find($request->school_student_id)];
+            }
+
+            $phoneNumbers = collect($students)
+                ->pluck($request->school_notification_type_id == 4 ? "parent_whatsapp_mobile_number" : "student_whatsapp_mobile_number")
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+             $this->notification->requestSocket([
+                "instanceId" => $school->whatsapp_instance_id,
+                "token" => $school->whatsapp_token,
+                "phoneNumbers" => $phoneNumbers,
+                "message" => $message,
+            ], "sendBulkWhatsAppMessages");
+
+        } catch (\Exception $e) {
+            \Log::error("Failed to send WhatsApp message: " . $e->getMessage());
+        }
+
+        return response()->json([
+            "message" => "Notification sent successfully",
+            "notification_id" => $notification->id,
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        return response()->json([
+            "message" => "Error sending notification",
+            "error" => $e->getMessage(),
+        ], 500);
     }
+}
+
 
     public function deleteNotification(Request $request)
     {
@@ -850,15 +1161,18 @@ class SchoolController extends Controller
                 $notification->id
             )->delete();
 
+            SchoolNotificationSupervisor::where(
+                "school_notification_id",
+                $notification->id
+            )->delete();
+
             // Delete the notification itself
             $notification->delete();
 
             DB::commit();
 
             return response()->json(
-                [
-                    "message" => "Notification deleted successfully",
-                ],
+                ["message" => "Notification deleted successfully"],
                 200
             );
         } catch (\Exception $e) {
@@ -872,6 +1186,56 @@ class SchoolController extends Controller
                 500
             );
         }
+    }
+
+    public function addOrEditSchoolSubjectTotalVideo(Request $request)
+{
+    $this->validate($request, [
+        'school_id' => 'required|integer|exists:schools,id',
+        'subject_id' => 'required|integer|exists:subjects,id',
+        'count' => 'required|integer|min:0',
+        'school_subject_total_video_id' => 'nullable|integer|exists:schools_subjects_total_videos,id',
+    ]);
+
+    if ($request->school_subject_total_video_id) {
+        // Edit existing
+        $record = SchoolSubjectTotalVideo::find($request->school_subject_total_video_id);
+        $record->update([
+            'school_id' => $request->school_id,
+            'subject_id' => $request->subject_id,
+            'count' => $request->count,
+        ]);
+    } else {
+        // Create new
+        $record = SchoolSubjectTotalVideo::create([
+            'school_id' => $request->school_id,
+            'subject_id' => $request->subject_id,
+            'count' => $request->count,
+        ]);
+    }
+
+    return response()->json([
+        'status' => true,
+        'message' => $request->school_subject_total_video_id ? 'Updated successfully' : 'Added successfully',
+        'data' => $record,
+    ]);
+}
+
+
+    public function getSubjects(Request $request)
+    {
+
+        $this->validate($request, [
+            "class_id" => "required|integer|exists:classes,id",
+        ]);
+        $subject = Subject::
+            whereHas('classes', function ($qur) use ($request) {
+                    $qur->where('class_id', $request->class_id);
+                })
+            ->withCount(["schoolChapters" ,"questions", "schoolVideos" , "videos"])
+            ->with('totalVideos')
+            ->paginate(30);
+        return $subject;
     }
 
     public function editNotification(Request $request)
@@ -1283,7 +1647,6 @@ class SchoolController extends Controller
                 "comment" => $request->comment ?? "-",
                 "employee_id" => $user->id,
             ]);
-
             // Create SchoolBranchCost if branch_id is provided
             if (!empty($request->school_branch_id)) {
                 SchoolBranchCost::create([
@@ -1513,9 +1876,7 @@ class SchoolController extends Controller
         $registration->save();
 
         return response()->json(
-            [
-                "message" => "Registration updated successfully.",
-            ],
+            ["message" => "Registration updated successfully."],
             200
         );
     }
@@ -1525,6 +1886,8 @@ class SchoolController extends Controller
         // Validate the incoming request
         $this->validate($request, [
             "full_name" => "bail|required|string|max:500",
+            "student_image" =>
+                "bail|nullable|file|mimes:jpeg,png,jpg,pdf|max:10240",
             "mother_full_name" => "bail|required|string|max:500",
             "gender" => "bail|required|integer|in:1,2", // Assuming 1: Male, 2: Female
             "birthday" => "bail|required|date",
@@ -1544,7 +1907,71 @@ class SchoolController extends Controller
             "fee" => "bail|required|integer|min:1",
             "first_payment_amount" => "bail|nullable|integer|min:0",
             "file_url" => "bail|nullable|file|mimes:jpeg,png,pdf,jpg|max:10240", // Validate file upload
+            "school_student_id" =>
+                "bail|nullable|integer|exists:schools_students,id", // New field for existing student
         ]);
+
+        $academicYear = AcademicYear::orderBy("id", "desc")->first();
+
+        // Check if school_student_id exists, if so, forward to registerExistingStudent
+        if (
+            $request->has("school_student_id") &&
+            $request->school_student_id !== null
+        ) {
+            // Get latest subscription for this student
+            $lastSubscription = SchoolRegistration::where(
+                "student_id",
+                $request->school_student_id
+            )
+                ->orderBy("id", "desc")
+                ->first();
+
+            if (
+                $lastSubscription &&
+                $lastSubscription->academic_year_id == $academicYear->id
+            ) {
+                if ($lastSubscription->school_id != $request->school_id) {
+                    return response()->json(
+                        [
+                            "status" => "error",
+                            "message" =>
+                                "This student is already registered in another school for the current academic year.",
+                        ],
+                        409
+                    );
+                }
+
+                if ($lastSubscription->school_id == $request->school_id) {
+                    return response()->json(
+                        [
+                            "status" => "error",
+                            "message" =>
+                                "This student is already registered in your school for the current academic year. Please update the subscription instead.",
+                        ],
+                        409
+                    );
+                }
+            }
+
+            // Pass request to registerExistingStudent if validations passed
+            return $this->registerExistingStudent($request);
+        }
+
+        $existingStudent = SchoolStudent::where(
+            "national_number",
+            $request->national_number
+        )->first();
+        if ($existingStudent) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" =>
+                        "A student with this national number already exists.",
+                    "existing_student_id" => $existingStudent->id,
+                ],
+                409
+            ); // 409 Conflict
+        }
 
         $supervisor = auth()
             ->user()
@@ -1554,17 +1981,6 @@ class SchoolController extends Controller
         try {
             // Step 1: Get the latest academic year
             $academicYear = AcademicYear::orderBy("id", "desc")->first();
-
-            // If no academic year is found, return an error response
-            if (!$academicYear) {
-                return response()->json(
-                    [
-                        "status" => "error",
-                        "message" => "No academic year found.",
-                    ],
-                    404
-                );
-            }
 
             // Handle file upload for National ID
             $fileUrl = null; // Default to null
@@ -1585,8 +2001,28 @@ class SchoolController extends Controller
                         500
                     );
                 }
+            }
 
-                $fileUrl = "national_ids/" . $fileName; // Save just the filename in DB, not full path
+            $imageUrl = null; // Default to null
+            if ($request->hasFile("student_image")) {
+                $imageName =
+                    uniqid() .
+                    "." .
+                    $request->file("student_image")->extension();
+                if (
+                    !$request
+                        ->file("student_image")
+                        ->move(
+                            "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/schools_students_images/",
+                            $imageName
+                        )
+                ) {
+                    DB::rollBack();
+                    return response()->json(
+                        ["error" => "Failed to upload student image."],
+                        500
+                    );
+                }
             }
 
             // Step 2: Insert the student into `schools_students`
@@ -1605,6 +2041,7 @@ class SchoolController extends Controller
                 "country_id" => $request->country_id,
                 "state_id" => $request->state_id,
                 "religion_id" => $request->religion_id,
+                "image" => $imageName,
                 "school_branch_room_id" => $request->school_branch_room_id,
                 "file_url" => $fileUrl, // Save the file URL in the database
             ]);
@@ -1651,6 +2088,371 @@ class SchoolController extends Controller
             );
         }
     }
+    public function registerNewStudentViaPlatform(Request $request)
+    {
+        $this->validate($request, [
+            "full_name" => "bail|required|string|max:500",
+            "mother_full_name" => "bail|required|string|max:500",
+            "gender" => "bail|required|integer|in:1,2",
+            "birthday" => "bail|required|date",
+            "parent_mobile_number" => "bail|required|string|max:15",
+            "parent_whatsapp_mobile_number" => "bail|required|string|max:15",
+            "student_whatsapp_mobile_number" => "bail|required|string|max:15",
+            "national_number" => "bail|required|string|max:100",
+            "country_id" => "bail|required|integer|exists:countries,id",
+            "state_id" => "bail|required|integer|exists:states,id",
+            "religion_id" => "bail|required|integer|exists:religions,id",
+            "school_branch_room_id" =>
+                "bail|required|integer|exists:schools_branches_rooms,id",
+            "school_id" => "bail|required|exists:schools,id",
+            "file_url" => "bail|nullable|file|mimes:jpeg,png,pdf,jpg|max:10240",
+            "student_image" =>
+                "bail|nullable|file|mimes:jpeg,png,pdf,jpg|max:10240",
+        ]);
+
+        $academicYear = AcademicYear::orderBy("id", "desc")->first();
+
+        $student = SchoolStudent::where(
+            "national_number",
+            $request->national_number
+        )->first();
+
+        if ($student) {
+            $registration = SchoolRegistration::where(
+                "school_student_id",
+                $student->id
+            )
+                ->where("academic_year_id", $academicYear->id)
+                ->first();
+
+            if ($registration) {
+                $school = School::find($registration->school_id);
+                if ($registration->school_id == $request->school_id) {
+                    return response()->json(
+                        [
+                            "title" => "تسجيل سابق",
+                            "body" =>
+                                "تم تسجيل الطالب بالفعل في " .
+                                $school->ar_name .
+                                " هذا العام. يمكنك عرض التسجيل وتعديله.",
+                            "type" => 1,
+                            "natinational_number" => $student->national_number,
+                        ],
+                        409
+                    );
+                } else {
+                    return response()->json(
+                        [
+                            "title" => "الطالب مسجل في مدرسة أخرى",
+                            "body" =>
+                                "الطالب مسجل في " .
+                                $school->ar_name .
+                                " هذا العام. يرجى التواصل مع الدعم الفني لنقل الطالب.",
+                            "type" => 2,
+                            "natinational_number" => $student->national_number,
+                        ],
+                        409
+                    );
+                }
+            }
+
+            // Update student data if needed
+            $student->update([
+                "full_name" => $request->full_name,
+                "mother_full_name" => $request->mother_full_name,
+                "gender" => $request->gender,
+                "birthday" => $request->birthday,
+                "parent_mobile_number" => $request->parent_mobile_number,
+                "parent_whatsapp_mobile_number" =>
+                    $request->parent_whatsapp_mobile_number,
+                "student_whatsapp_mobile_number" =>
+                    $request->student_whatsapp_mobile_number,
+                "country_id" => $request->country_id,
+                "state_id" => $request->state_id,
+                "religion_id" => $request->religion_id,
+                "school_branch_room_id" => $request->school_branch_room_id,
+            ]);
+
+            // Handle updated files for existing student
+            if ($request->hasFile("file_url")) {
+                if ($student->file_url) {
+                    $oldFilePath = public_path(
+                        "national_ids/" . $student->file_url
+                    );
+                    if (file_exists($oldFilePath)) {
+                        unlink($oldFilePath);
+                    }
+                }
+
+                $fileName =
+                    uniqid() . "." . $request->file("file_url")->extension();
+                if (
+                    !$request
+                        ->file("file_url")
+                        ->move(public_path("national_ids"), $fileName)
+                ) {
+                    return response()->json(
+                        ["error" => "Failed to upload national ID file."],
+                        500
+                    );
+                }
+                $student->file_url = $fileName;
+            }
+
+            if ($request->hasFile("student_image")) {
+                if ($student->image) {
+                    $oldImagePath = public_path(
+                        "schools_students_images/" . $student->image
+                    );
+                    if (file_exists($oldImagePath)) {
+                        unlink($oldImagePath);
+                    }
+                }
+
+                $imageName =
+                    uniqid() .
+                    "." .
+                    $request->file("student_image")->extension();
+                if (
+                    !$request
+                        ->file("student_image")
+                        ->move(
+                            public_path("schools_students_images"),
+                            $imageName
+                        )
+                ) {
+                    return response()->json(
+                        ["error" => "Failed to upload student image."],
+                        500
+                    );
+                }
+                $student->image = $imageName;
+            }
+
+            $student->save(); // Save all updates
+
+            $request->merge(["school_student_id" => $student->id]);
+            return $this->registerExistingStudentViaPlatform($request);
+        }
+
+        $supervisor = auth()
+            ->user()
+            ->load("schoolSupervisor")->schoolSupervisor;
+
+        DB::beginTransaction();
+        try {
+            // Upload files
+            $fileUrl = null;
+            if ($request->hasFile("file_url")) {
+                $fileName =
+                    uniqid() . "." . $request->file("file_url")->extension();
+                if (
+                    !$request
+                        ->file("file_url")
+                        ->move(public_path("national_ids"), $fileName)
+                ) {
+                    DB::rollBack();
+                    return response()->json(
+                        ["error" => "Failed to upload national ID file."],
+                        500
+                    );
+                }
+                $fileUrl = $fileName;
+            }
+
+            $imageName = null;
+            if ($request->hasFile("student_image")) {
+                $imageName =
+                    uniqid() .
+                    "." .
+                    $request->file("student_image")->extension();
+                if (
+                    !$request
+                        ->file("student_image")
+                        ->move(
+                            public_path("schools_students_images"),
+                            $imageName
+                        )
+                ) {
+                    DB::rollBack();
+                    return response()->json(
+                        ["error" => "Failed to upload student image."],
+                        500
+                    );
+                }
+            }
+
+            // Create new student
+            $student = SchoolStudent::create([
+                "school_id" => $request->school_id,
+                "school_student_type_id" => "3",
+                "full_name" => $request->full_name,
+                "mother_full_name" => $request->mother_full_name,
+                "gender" => $request->gender,
+                "birthday" => $request->birthday,
+                "parent_mobile_number" => $request->parent_mobile_number,
+                "parent_whatsapp_mobile_number" =>
+                    $request->parent_whatsapp_mobile_number,
+                "student_whatsapp_mobile_number" =>
+                    $request->student_whatsapp_mobile_number,
+                "national_number" => $request->national_number,
+                "country_id" => $request->country_id,
+                "state_id" => $request->state_id,
+                "religion_id" => $request->religion_id,
+                "image" => $imageName,
+                "school_branch_room_id" => $request->school_branch_room_id,
+                "file_url" => $fileUrl,
+            ]);
+
+            // Register student
+            SchoolRegistration::create([
+                "school_id" => $request->school_id,
+                "academic_year_id" => $academicYear->id,
+                "school_branch_room_id" => $request->school_branch_room_id,
+                "school_student_id" => $student->id,
+                "school_registration_type_id" => "3",
+                "currency_id" => "0",
+                "registration_fee" => "0",
+                "supervisor_id" => $supervisor->id,
+            ]);
+
+            DB::commit();
+
+            return response()->json(
+                [
+                    "status" => "success",
+                    "message" => "Student registered successfully",
+                    "student" => $student,
+                ],
+                201
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => $e->getMessage(),
+                ],
+                500
+            );
+        }
+    }
+
+    public function editRegistrationViaPlatform(Request $request)
+    {
+        // Validate request inputs
+        $this->validate($request, [
+            'school_registration_id' => 'required|exists:schools_registrations,id',
+            'school_student_id' => 'required|exists:schools_students,id',
+            'school_branch_room_id' => 'nullable|exists:schools_branches_rooms,id',
+        ]);
+    
+        try {
+            $registration = SchoolRegistration::findOrFail($request->school_registration_id);
+            $academicYear = AcademicYear::orderBy('id', 'desc')->first();
+    
+            $studentId = $request->school_student_id;
+    
+            // ✅ Skip checking if it's the same student already in this registration
+            if ($studentId != $registration->school_student_id) {
+                // Check if student is already registered in the same academic year
+                $existingRegistration = SchoolRegistration::where('school_student_id', $studentId)
+                    ->where('academic_year_id', $academicYear->id)
+                    ->orderBy('id', 'desc')
+                    ->first();
+    
+                if ($existingRegistration) {
+                    $school = School::find($existingRegistration->school_id);
+    
+                    if ($existingRegistration->school_id == $registration->school_id) {
+                        return response()->json([
+                            "title" => "تسجيل سابق",
+                            "body" => "تم تسجيل الطالب بالفعل في " . $school->ar_name . " هذا العام.",
+                            "type" => 1,
+                            "natinational_number" => $existingRegistration->student->national_number,
+                        ], 409);
+                    } else {
+                        return response()->json([
+                            "title" => "الطالب مسجل في مدرسة أخرى",
+                            "body" => "الطالب مسجل في " . $school->ar_name . " هذا العام. يرجى التواصل مع الدعم الفني لنقل الطالب.",
+                            "type" => 2,
+                            "natinational_number" => $existingRegistration->student->national_number,
+                        ], 409);
+                    }
+                }
+            }
+    
+            // ✅ Update student ID
+            $registration->school_student_id = $studentId;
+    
+            // ✅ Update branch room if sent
+            if ($request->filled('school_branch_room_id')) {
+                $registration->school_branch_room_id = $request->school_branch_room_id;
+            }
+    
+            $registration->save();
+    
+            return response()->json([
+                'status' => 'success',
+                'message' => 'تم تحديث بيانات التسجيل بنجاح',
+                'registration' => $registration,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'حدث خطأ أثناء تحديث التسجيل',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    
+
+
+    public function registerExistingStudentViaPlatform(Request $request)
+    {
+        $this->validate($request, [
+            "school_student_id" => "required|exists:schools_students,id",
+            "school_id" => "required|exists:schools,id",
+            "school_branch_room_id" =>
+                "required|exists:schools_branches_rooms,id",
+        ]);
+
+        $academicYear = AcademicYear::orderBy("id", "desc")->first();
+        $supervisor = auth()
+            ->user()
+            ->load("schoolSupervisor")->schoolSupervisor;
+
+        try {
+            $registration = SchoolRegistration::create([
+                "school_id" => $request->school_id,
+                "academic_year_id" => $academicYear->id,
+                "school_branch_room_id" => $request->school_branch_room_id,
+                "school_student_id" => $request->school_student_id,
+                "school_registration_type_id" => "3",
+                "currency_id" => "0",
+                "registration_fee" => "0",
+                "supervisor_id" => $supervisor->id,
+            ]);
+
+            return response()->json(
+                [
+                    "status" => "success",
+                    "message" =>
+                        "Existing student registered for this academic year",
+                    "registration" => $registration,
+                ],
+                201
+            );
+        } catch (\Exception $e) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => $e->getMessage(),
+                ],
+                500
+            );
+        }
+    }
 
     public function registerExistingStudent(Request $request)
     {
@@ -1662,7 +2464,7 @@ class SchoolController extends Controller
                 "bail|required|exists:schools_registrations_types,id",
             "currency_id" => "bail|required|integer|exists:currencies,id",
             "fee" => "bail|required|integer|min:1",
-            "first_payment_amount" => "bail|nullable|integer|min:0",
+            "first_payment_amount" => "bail|nullable|integer|min:1",
         ]);
 
         $supervisor = auth()
@@ -1733,6 +2535,8 @@ class SchoolController extends Controller
             "school_registration_id" =>
                 "required|exists:schools_registrations,id",
             "amount" => "required|numeric|min:1",
+            "currency_id" => "required|exists:currencies,id",
+            "image" => "required|image|mimes:jpeg,png,jpg,gif|max:2048", // Add validation for the image
         ]);
 
         $supervisor = auth()
@@ -1746,48 +2550,159 @@ class SchoolController extends Controller
             );
         }
 
-        $installment = SchoolRegistrationInstallment::create([
-            "school_registration_id" => $request->school_registration_id,
-            "amount" => $request->amount,
-            "supervisor_id" => $supervisor->id,
-        ]);
+        DB::beginTransaction();
 
-        $installment->supervisor = $installment->load("supervisor");
-        $installment->created_at = now();
+        try {
+            // Create the installment without supervisor_id
+            $installment = SchoolRegistrationInstallment::create([
+                "school_registration_id" => $request->school_registration_id,
+                "amount" => $request->amount,
+                "currency_id" => $request->currency_id,
+            ]);
 
-        return response()->json(
-            [
-                "message" => "Installment added successfully",
-                "installment" => $installment,
-            ],
-            201
-        );
+            // Store supervisor separately
+            SchoolRegistrationInstallmentSupervisor::create([
+                "school_registration_installment_id" => $installment->id,
+                "supervisor_id" => $supervisor->id,
+            ]);
+
+            // Handle document/image upload
+            $image = $request->file("image");
+            $imageName = uniqid() . "." . $image->extension();
+
+            if (
+                !$image->move(
+                    "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/installments_documents/",
+                    $imageName
+                )
+            ) {
+                DB::rollBack();
+                return response()->json(
+                    ["error" => "Failed to upload image."],
+                    500
+                );
+            }
+
+            SchoolRegistrationInstallmentDocument::create([
+                "school_registration_installment_id" => $installment->id,
+                "document" => $imageName,
+            ]);
+
+            DB::commit();
+
+            // Load relations to return full data
+            $installment->load("document", "supervisor.supervisor", "currency"); // assumes defined relations
+
+            return response()->json(
+                [
+                    "message" => "Installment added successfully",
+                    "installment" => $installment,
+                ],
+                201
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(
+                [
+                    "error" => "Something went wrong",
+                    "details" => $e->getMessage(),
+                ],
+                500
+            );
+        }
     }
 
     public function editSchoolInstallment(Request $request)
     {
         $this->validate($request, [
-            "id" => "required|exists:schools_registrations_installments,id",
+            "school_registration_installment_id" =>
+                "required|exists:schools_registrations_installments,id",
             "amount" => "required|numeric|min:1",
+            "currency_id" => "nullable|exists:currencies,id", // Make currency_id optional
+            "image" => "nullable|image|mimes:jpeg,png,jpg,gif|max:2048",
         ]);
 
-        $installment = SchoolRegistrationInstallment::with("supervisor")->find(
-            $request->id
-        );
+        DB::beginTransaction();
 
-        if (!$installment) {
-            return response()->json(["error" => "Installment not found"], 404);
+        try {
+            $installment = SchoolRegistrationInstallment::with(
+                "document"
+            )->find($request->school_registration_installment_id);
+
+            if (!$installment) {
+                return response()->json(
+                    ["error" => "Installment not found"],
+                    404
+                );
+            }
+
+            // Update amount and currency_id (if provided)
+            $installment->update([
+                "amount" => $request->amount,
+                "currency_id" =>
+                    $request->currency_id ?? $installment->currency_id, // Preserve old currency if not provided
+            ]);
+
+            // If new image is uploaded
+            if ($request->hasFile("image")) {
+                $document = $installment->document; // using hasOne
+
+                if ($document) {
+                    $oldPath =
+                        "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/installments_documents/" .
+                        $document->document;
+                    if (file_exists($oldPath)) {
+                        unlink($oldPath); // delete old image file
+                    }
+
+                    $document->delete(); // remove DB record
+                }
+
+                // Upload and store new image
+                $image = $request->file("image");
+                $imageName = uniqid() . "." . $image->extension();
+
+                if (
+                    !$image->move(
+                        "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/installments_documents/",
+                        $imageName
+                    )
+                ) {
+                    DB::rollBack();
+                    return response()->json(
+                        ["error" => "Failed to upload new image."],
+                        500
+                    );
+                }
+
+                SchoolRegistrationInstallmentDocument::create([
+                    "school_registration_installment_id" => $installment->id,
+                    "document" => $imageName,
+                ]);
+            }
+
+            DB::commit();
+
+            // Reload updated relations
+            $installment->load("document", "supervisor.supervisor", "currency");
+
+            return response()->json(
+                [
+                    "message" => "Installment updated successfully",
+                    "installment" => $installment,
+                ],
+                200
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(
+                [
+                    "error" => "Something went wrong",
+                    "details" => $e->getMessage(),
+                ],
+                500
+            );
         }
-
-        $installment->update(["amount" => $request->amount]);
-
-        return response()->json(
-            [
-                "message" => "Installment updated successfully",
-                "installment" => $installment,
-            ],
-            200
-        );
     }
 
     public function deleteSchoolInstallment(Request $request)
@@ -1796,20 +2711,54 @@ class SchoolController extends Controller
             "id" => "required|exists:schools_registrations_installments,id",
         ]);
 
-        $installment = SchoolRegistrationInstallment::find($request->id);
+        $installment = SchoolRegistrationInstallment::with([
+            "supervisor",
+            "document",
+        ])->find($request->id);
 
         if (!$installment) {
             return response()->json(["error" => "Installment not found"], 404);
         }
 
-        $installment->delete();
+        DB::beginTransaction();
 
-        return response()->json(
-            [
-                "message" => "Installment deleted successfully",
-                "installment" => $installment,
-            ],
-            200
-        );
+        try {
+            // Delete related supervisor entries
+            $installment->supervisor()->delete();
+
+            // Delete related document (if exists)
+            if ($installment->document) {
+                $oldPath =
+                    "/home/nubikkce/yalla-emtihan.com/yalla-emtihan.public/installments_documents/" .
+                    $installment->document->document;
+                if (file_exists($oldPath)) {
+                    unlink($oldPath); // Delete old document file
+                }
+
+                $installment->document->delete();
+            }
+
+            // Delete the installment record
+            $installment->delete();
+
+            DB::commit();
+
+            return response()->json(
+                [
+                    "message" =>
+                        "Installment and related records deleted successfully",
+                ],
+                200
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(
+                [
+                    "error" => "Something went wrong",
+                    "details" => $e->getMessage(),
+                ],
+                500
+            );
+        }
     }
 }

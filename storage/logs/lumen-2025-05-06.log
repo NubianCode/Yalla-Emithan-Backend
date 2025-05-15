@@ -1,1 +1,17 @@
-[2025-05-06 05:19:15] local.ERROR: Firebase Notification Error: Unable to connect to the API: cURL error 52: Empty reply from server (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://fcm.googleapis.com/v1/projects/yalla-emtihan/messages:send  
+[2025-05-06 08:24:26] local.ERROR: Firebase Notification Error: Android message is too big  
+[2025-05-06 08:26:53] local.ERROR: Firebase Notification Error: Unable to connect to the API: cURL error 28: Connection timed out after 15008 milliseconds (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://oauth2.googleapis.com/token  
+[2025-05-06 08:29:51] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 08:31:04] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 08:32:07] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:30:10] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:36:24] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:36:35] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:36:44] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:44:38] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:49:39] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 09:54:17] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 10:04:13] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 10:04:43] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 10:07:22] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 10:21:42] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  
+[2025-05-06 10:22:05] local.ERROR: Failed to send WhatsApp message: Message data must be a one-dimensional array of string(able) keys and values.  

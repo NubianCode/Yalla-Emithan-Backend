@@ -16,6 +16,10 @@ class Subject extends Model
     public function chapters() {
         return $this->hasMany(Chapter::class);
     }
+
+    public function schoolChapters() {
+        return $this->hasMany(SchoolVideoChapter::class);
+    }
     
     public function lessons() {
         return $this->hasManyThrough(Lesson::class, Chapter::class);
@@ -46,6 +50,14 @@ class Subject extends Model
     
     public function videosChpaters() {
         return $this->hasMany(SchoolVideoChapter::class, 'subject_id');
+    }
+
+    public function totalVideos() {
+        return $this->hasOne(SchoolSubjectTotalVideo::class);
+    }
+
+    public function schoolVideos() {
+        return $this->hasManyThrough(SchoolVideo::class,SchoolVideoChapter::class,'subject_id','school_video_chapter_id', 'id','id');
     }
     
     
