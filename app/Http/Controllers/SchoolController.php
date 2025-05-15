@@ -53,11 +53,142 @@ class SchoolController extends Controller
     public function __construct()
     {
         $this->middleware("auth:api", [
-            "except" => ["getSchools", "getSchoolsV2"],
+            "except" => ["getSchools", "getSchoolsV2" , "getChaptersToPrint"],
         ]);
 
         $this->notification = new Notification();
     }
+
+    public function editSchoolVideo(Request $request)
+{
+    $this->validate($request, [
+        'name' => 'required|string',
+        'unlock_date' => 'nullable|date',
+        'duration' => 'nullable|string',
+        'video_id' => 'nullable|exists:videos,id',
+        'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime',
+        'school_video_id' => 'required|exists:schools_videos,id',
+    ]);
+
+    DB::beginTransaction();
+
+    try {
+        $schoolVideo = SchoolVideo::with(['basic', 'advanced'])->findOrFail($request->school_video_id);
+
+        if ($request->has('video_id')) {
+            // If there is an advanced video, delete the file first
+            if ($schoolVideo->advanced && $schoolVideo->advanced->url) {
+                $fullPath = "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/school_videos/" . $schoolVideo->advanced->url;
+                if (file_exists($fullPath)) {
+                    unlink($fullPath);
+                }
+            }
+
+            // Now delete the advanced record
+            SchoolVideoAdvanced::where('school_video_id', $request->school_video_id)->delete();
+
+            // Update or create basic
+            if ($schoolVideo->basic) {
+                $schoolVideo->basic->update([
+                    'video_id' => $request->video_id,
+                ]);
+            } else {
+                SchoolVideoBasic::create([
+                    'school_video_id' => $schoolVideo->id,
+                    'video_id' => $request->video_id,
+                ]);
+            }
+        } else {
+            // Delete basic
+            SchoolVideoBasic::where('school_video_id', $request->school_video_id)->delete();
+
+            // If advance exists, update file
+            if ($schoolVideo->advanced) {
+                if ($schoolVideo->advanced->url && $request->hasFile('video')) {
+                    $fullPath = "/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/school_videos/" . $schoolVideo->advanced->url;
+                    if (file_exists($fullPath)) {
+                        unlink($fullPath);
+                    }
+                }
+
+                if ($request->hasFile('video')) {
+                    $file = $request->file('video');
+                    $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $file->move("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/school_videos/", $fileName);
+
+                    $schoolVideo->advanced->update([
+                        'url' => $fileName,
+                    ]);
+                }
+            } else {
+                if ($request->hasFile('video')) {
+                    $file = $request->file('video');
+                    $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $file->move("/home/nubikkce/yalla-emtihan.com/yalla-emtihan/public/school_videos/", $fileName);
+
+                    SchoolVideoAdvanced::create([
+                        'school_video_id' => $schoolVideo->id,
+                        'url' => $fileName,
+                    ]);
+                }
+            }
+        }
+
+        // Update school video record
+        if($request->has('duration')) {
+            $schoolVideo->update([
+            'name' => $request->name,
+            'unlock_date' => $request->unlock_date,
+            'duration' => $request->duration,
+        ]);
+        }
+        else {
+            $schoolVideo->update([
+            'name' => $request->name,
+            'unlock_date' => $request->unlock_date,
+        ]);
+        }
+
+        DB::commit();
+
+        return response()->json(['message' => 'School video updated successfully.'], 200);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
+    }
+}
+
+
+
+    public function getChaptersToPrint(Request $request)
+{
+    $this->validate($request, [
+        'subject_id' => 'required|integer|exists:subjects,id',
+        'school_id' => 'required|integer|exists:schools,id',
+    ]);
+
+    $subject = Subject::where('id', $request->subject_id)
+        ->with([
+            // Filtered total videos by school_id
+            'totalVideos' => function ($q) use ($request) {
+                $q->where('school_id', $request->school_id);
+            },
+            // Filtered chapters by school_id
+            'videosChpaters' => function ($q) use ($request) {
+                $q->where('school_id', $request->school_id);
+            },
+            // Videos inside chapters, ordered by sort desc
+            'videosChpaters.videos' => function ($q) {
+                $q->orderBy('sort', 'desc');
+            }
+        ])
+        ->first();
+
+    return response()->json($subject);
+}
+
+
 
     public function deleteSchoolVideo(Request $request)
 {
@@ -75,7 +206,7 @@ class SchoolController extends Controller
         $isAdvanced = DB::table('schools_videos_advanced')->where('school_video_id', $videoId)->exists();
 
         if ($isBasic) {
-            DB::table('schools_videos_basic')->where('schools_video_id', $videoId)->delete();
+            DB::table('schools_videos_basic')->where('school_video_id', $videoId)->delete();
         }
 
         if ($isAdvanced) {

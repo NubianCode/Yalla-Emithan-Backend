@@ -168,6 +168,8 @@ $router->group(['prefix' => 'schools'], function () use ($router) {
     $router->post('reorderVideos','SchoolController@reorderVideos');
     $router->post('deleteSchoolVideo','SchoolController@deleteSchoolVideo');
     $router->post('addSchoolVideo','SchoolController@addSchoolVideo');
+    $router->get('getChaptersToPrint','SchoolController@getChaptersToPrint');
+    $router->post('editSchoolVideo','SchoolController@editSchoolVideo');
 
     
     
